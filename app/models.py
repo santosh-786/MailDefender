@@ -1,6 +1,7 @@
 from app import db
 from datetime import datetime
 import json
+import uuid
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -10,11 +11,16 @@ class CustomEncoder(json.JSONEncoder):
 
 class EmailAnalysis(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    case_id = db.Column(db.String(50), unique=True)
     filename = db.Column(db.String(255))
     subject = db.Column(db.String(255))
     sender = db.Column(db.String(255))
     recipient = db.Column(db.String(255))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Workflow fields
+    status = db.Column(db.String(50), default='New') # New, Phishing, Benign, Suspicious
+    analyst_notes = db.Column(db.Text)
 
     # Store results as JSON strings
     headers_json = db.Column(db.Text)
@@ -23,9 +29,14 @@ class EmailAnalysis(db.Model):
     attachments_json = db.Column(db.Text)
 
     risk_score = db.Column(db.Integer)
-    risk_level = db.Column(db.String(50)) # Low, Medium, High, Critical
+    risk_level = db.Column(db.String(50))
 
     report_data_json = db.Column(db.Text)
+
+    def __init__(self, **kwargs):
+        super(EmailAnalysis, self).__init__(**kwargs)
+        if not self.case_id:
+            self.case_id = f"CASE-{uuid.uuid4().hex[:8].upper()}"
 
     def set_headers(self, data):
         self.headers_json = json.dumps(data, cls=CustomEncoder)

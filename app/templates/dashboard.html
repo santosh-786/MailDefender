@@ -4,51 +4,61 @@
 <div class="row mb-4">
     <div class="col">
         <h2>SOC Analyst Dashboard</h2>
-        <p class="text-muted">Overview of recent email threat investigations</p>
+        <p class="text-muted">Operational view of phishing investigations</p>
     </div>
     <div class="col-auto">
+        <form action="{{ url_for('main.index') }}" method="get" class="d-inline-block me-2">
+            <div class="input-group">
+                <input type="text" name="q" class="form-control bg-dark text-light border-secondary" placeholder="Search Case/Sender..." value="{{ request.args.get('q', '') }}">
+                <button class="btn btn-outline-secondary" type="submit">Search</button>
+            </div>
+        </form>
         <a href="{{ url_for('main.upload') }}" class="btn btn-primary">New Analysis</a>
     </div>
 </div>
 
 <div class="card">
     <div class="card-body">
-        <h5 class="card-title">Recent Analyses</h5>
+        <h5 class="card-title">Recent Investigations</h5>
         <div class="table-responsive">
             <table class="table table-hover mt-3">
                 <thead>
                     <tr>
+                        <th>Case ID</th>
                         <th>Date</th>
                         <th>Subject</th>
                         <th>Sender</th>
-                        <th>Risk Score</th>
-                        <th>Risk Level</th>
+                        <th>Risk</th>
+                        <th>Status</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for analysis in analyses %}
                     <tr>
+                        <td><code>{{ analysis.case_id }}</code></td>
                         <td>{{ analysis.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
                         <td>{{ analysis.subject }}</td>
-                        <td>{{ analysis.sender }}</td>
-                        <td>{{ analysis.risk_score }}</td>
+                        <td><small>{{ analysis.sender }}</small></td>
                         <td>
                             <span class="badge
-                                {% if analysis.risk_level == 'Low' %}bg-success
-                                {% elif analysis.risk_level == 'Medium' %}bg-warning
-                                {% elif analysis.risk_level == 'High' %}bg-danger
-                                {% else %}bg-dark{% endif %}">
-                                {{ analysis.risk_level }}
+                                {% if analysis.risk_score >= 80 %}bg-danger
+                                {% elif analysis.risk_score >= 60 %}bg-danger
+                                {% elif analysis.risk_score >= 30 %}bg-warning
+                                {% else %}bg-success{% endif %}">
+                                {{ analysis.risk_score }}
                             </span>
                         </td>
                         <td>
-                            <a href="{{ url_for('main.results', id=analysis.id) }}" class="btn btn-sm btn-outline-light">View Report</a>
+                            <span class="badge bg-secondary">{{ analysis.status }}</span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('main.results', id=analysis.id) }}" class="btn btn-sm btn-outline-light">Investigate</a>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="text-center">No analyses found. Start by uploading an email.</td>
+                        <td colspan="7" class="text-center">No investigations found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -12,3 +12,4 @@ requests
 python-magic
 python-dotenv
 bleach
+yara-python

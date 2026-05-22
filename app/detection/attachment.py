@@ -1,8 +1,10 @@
 import hashlib
 import os
 import magic
+from app.detection.yara_service import YaraService
 
 class AttachmentHandlerService:
+    yara = YaraService()
     SUSPICIOUS_EXTENSIONS = {'.exe', '.scr', '.vbs', '.js', '.jar', '.bat', '.cmd', '.msi', '.ps1', '.html', '.htm'}
     OFFICE_EXTENSIONS = {'.docm', '.xlsm', '.pptm'}
 
@@ -59,6 +61,12 @@ class AttachmentHandlerService:
             if actual_mime == 'application/zip':
                 # In a real app we'd use zipfile to check for encryption
                 pass
+
+            # 6. YARA Scanning
+            yara_matches = AttachmentHandlerService.yara.scan_data(content)
+            if yara_matches:
+                is_suspicious = True
+                reasons.append(f"YARA matches: {', '.join(yara_matches)}")
 
             results.append({
                 'filename': filename,

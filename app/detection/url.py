@@ -27,11 +27,13 @@ class URLAnalyzerService:
 
         findings = []
         is_suspicious = False
+        is_ip_url = False
 
         # 1. IP-based URL
         if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ext.domain):
             findings.append("IP-based URL")
             is_suspicious = True
+            is_ip_url = True
 
         # 2. Suspicious TLD
         if ext.suffix in URLAnalyzerService.SUSPICIOUS_TLDS:
@@ -61,5 +63,6 @@ class URLAnalyzerService:
             'url': url,
             'domain': domain,
             'findings': findings,
-            'is_suspicious': is_suspicious
+            'is_suspicious': is_suspicious,
+            'is_ip_url': is_ip_url
         }
