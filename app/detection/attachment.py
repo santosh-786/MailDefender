@@ -1,6 +1,6 @@
 import hashlib
 import os
-import magic
+import puremagic
 from app.detection.yara_service import YaraService
 
 class AttachmentHandlerService:
@@ -29,8 +29,10 @@ class AttachmentHandlerService:
             _, ext = os.path.splitext(filename.lower())
 
             # Magic byte validation
-            mime = magic.Magic(mime=True)
-            actual_mime = mime.from_buffer(content)
+            try:
+                actual_mime = puremagic.from_string(content, mime=True)
+            except:
+                actual_mime = 'application/octet-stream'
 
             is_suspicious = False
             reasons = []

@@ -9,7 +9,7 @@ tldextract
 pyspf
 dkimpy
 requests
-python-magic
+puremagic
 python-dotenv
 bleach
 yara-python
