@@ -27,6 +27,7 @@ class EmailAnalysis(db.Model):
     auth_results_json = db.Column(db.Text)
     ioc_results_json = db.Column(db.Text)
     attachments_json = db.Column(db.Text)
+    enrichment_results_json = db.Column(db.Text)
 
     risk_score = db.Column(db.Integer)
     risk_level = db.Column(db.String(50))
@@ -61,3 +62,9 @@ class EmailAnalysis(db.Model):
 
     def get_attachments(self):
         return json.loads(self.attachments_json) if self.attachments_json else []
+
+    def set_enrichment_results(self, data):
+        self.enrichment_results_json = json.dumps(data, cls=CustomEncoder)
+
+    def get_enrichment_results(self):
+        return json.loads(self.enrichment_results_json) if self.enrichment_results_json else {}

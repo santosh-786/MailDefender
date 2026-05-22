@@ -19,6 +19,7 @@ from app.ioc_graph.mapper import IOCGraphMapper
 from app.scoring_v2.engine import ScoringEngineV2
 from app.workflow.service import WorkflowService
 from app.reporting.service import ReportService
+from app.enrichment.vt_service import VirusTotalService
 
 bp = Blueprint('main', __name__)
 
@@ -71,6 +72,23 @@ def upload():
             body_iocs = IOCExtractor.extract(parsed_data, url_results, attachment_results)
             ioc_graph = IOCGraphMapper.map_relationships(parsed_data, url_results, attachment_results, body_iocs)
 
+            # 2.5 External Enrichment (VirusTotal)
+            vt_service = VirusTotalService()
+            enrichment_results = {'files': {}, 'urls': {}, 'ips': {}}
+
+            # Limited to top hits for performance in free tier
+            for att in attachment_results[:2]:
+                report = vt_service.get_file_report(att['hashes']['sha256'])
+                if report: enrichment_results['files'][att['filename']] = report
+
+            for ur in url_results[:3]:
+                report = vt_service.get_url_report(ur['url'])
+                if report: enrichment_results['urls'][ur['url']] = report
+
+            if header_results.get('origin_ip'):
+                report = vt_service.get_ip_report(header_results['origin_ip'])
+                if report: enrichment_results['ips'][header_results['origin_ip']] = report
+
             # 3. Rule Engine Execution
             auth_rules = RulesLibrary.get_auth_rules()
             content_rules = RulesLibrary.get_content_rules()
@@ -116,6 +134,7 @@ def upload():
             analysis.set_auth_results(auth_results)
             analysis.set_ioc_results(body_iocs) # Store flat IOCs for CSV Export
             analysis.set_attachments(attachment_results)
+            analysis.set_enrichment_results(enrichment_results)
 
             report_data = {
                 'body_html': ReportService.sanitize_html(parsed_data['body_html']),
@@ -130,7 +149,8 @@ def upload():
                 'ioc_graph': ioc_graph,
                 'body_iocs': body_iocs,
                 'auth_results': auth_results,
-                'attachment_analysis': attachment_results
+                'attachment_analysis': attachment_results,
+                'enrichment': enrichment_results
             }
             analysis.report_data_json = json.dumps(report_data)
 
