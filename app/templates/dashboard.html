@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>SOC Analyst Dashboard</h2>
+        <p class="text-muted">Overview of recent email threat investigations</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('main.upload') }}" class="btn btn-primary">New Analysis</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Recent Analyses</h5>
+        <div class="table-responsive">
+            <table class="table table-hover mt-3">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Subject</th>
+                        <th>Sender</th>
+                        <th>Risk Score</th>
+                        <th>Risk Level</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for analysis in analyses %}
+                    <tr>
+                        <td>{{ analysis.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ analysis.subject }}</td>
+                        <td>{{ analysis.sender }}</td>
+                        <td>{{ analysis.risk_score }}</td>
+                        <td>
+                            <span class="badge
+                                {% if analysis.risk_level == 'Low' %}bg-success
+                                {% elif analysis.risk_level == 'Medium' %}bg-warning
+                                {% elif analysis.risk_level == 'High' %}bg-danger
+                                {% else %}bg-dark{% endif %}">
+                                {{ analysis.risk_level }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('main.results', id=analysis.id) }}" class="btn btn-sm btn-outline-light">View Report</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center">No analyses found. Start by uploading an email.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
