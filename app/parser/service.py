@@ -1,14 +1,16 @@
 import mailparser
 import bleach
 import os
-import magic
+import puremagic
 
 class EmailParserService:
     @staticmethod
     def parse_eml(file_path):
         # MIME type validation
-        mime = magic.Magic(mime=True)
-        file_type = mime.from_file(file_path)
+        try:
+            file_type = puremagic.from_file(file_path, mime=True)
+        except:
+            file_type = 'application/octet-stream'
         # eml files can be message/rfc822 or text/plain
         if file_type not in ['message/rfc822', 'text/plain']:
             # Log this in real app
