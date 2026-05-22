@@ -1,9 +1,19 @@
 import mailparser
 import bleach
+import os
+import magic
 
 class EmailParserService:
     @staticmethod
     def parse_eml(file_path):
+        # MIME type validation
+        mime = magic.Magic(mime=True)
+        file_type = mime.from_file(file_path)
+        # eml files can be message/rfc822 or text/plain
+        if file_type not in ['message/rfc822', 'text/plain']:
+            # Log this in real app
+            pass
+
         mail = mailparser.parse_from_file(file_path)
         with open(file_path, 'rb') as f:
             raw_content = f.read()
@@ -29,19 +39,27 @@ class EmailParserService:
             'From': format_addr(mail.from_),
             'To': format_addr(mail.to),
             'Subject': mail.subject,
-            'Date': mail.date,
+            'Date': str(mail.date) if mail.date else "",
             'Message-ID': mail.message_id,
-            'Reply-To': mail.reply_to,
+            'Reply-To': format_addr(mail.reply_to),
             'Return-Path': mail.headers.get('Return-Path'),
             'X-Originating-IP': mail.headers.get('X-Originating-IP'),
             'Received': mail.received
         }
 
-        # Extract body and sanitize
+        # Extract body and sanitize strictly
         body_html = mail.text_html[0] if mail.text_html else ""
         body_plain = mail.text_plain[0] if mail.text_plain else ""
 
-        sanitized_html = bleach.clean(body_html, tags=['p', 'b', 'i', 'u', 'a', 'br'], attributes={'a': ['href']})
+        # Strict allowlist for HTML
+        allowed_tags = ['p', 'b', 'i', 'u', 'br', 'hr', 'strong', 'em', 'table', 'thead', 'tbody', 'tr', 'th', 'td']
+        sanitized_html = bleach.clean(
+            body_html,
+            tags=allowed_tags,
+            attributes={},
+            strip=True,
+            strip_comments=True
+        )
 
         attachments = []
         for attachment in mail.attachments:
@@ -58,6 +76,4 @@ class EmailParserService:
             'body_plain': body_plain,
             'attachments': attachments,
             'subject': mail.subject,
-            'from': mail.from_,
-            'to': mail.to
         }

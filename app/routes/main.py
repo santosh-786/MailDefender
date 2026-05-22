@@ -2,12 +2,17 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 import os
 import uuid
+import json
 from app.models import EmailAnalysis
 from app import db
-from app.services.email_parser import EmailParserService
-from app.services.auth_analyzer import AuthAnalyzerService
-from app.services.threat_analyzer import ThreatAnalyzerService
-from app.services.attachment_handler import AttachmentHandlerService
+from app.parser.service import EmailParserService
+from app.detection.auth import AuthAnalyzerService
+from app.detection.attachment import AttachmentHandlerService
+from app.detection.header import HeaderAnalyzerService
+from app.detection.url import URLAnalyzerService
+from app.scoring.engine import RiskScoringEngine
+from app.ioc.extractor import IOCExtractor
+from app.reporting.service import ReportingService
 
 bp = Blueprint('main', __name__)
 
@@ -26,7 +31,7 @@ def upload():
         file = request.files.get('email_file')
 
         parsed_data = None
-        filename = "pasted_headers.txt"
+        filename = "pasted_content.txt"
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
@@ -35,7 +40,6 @@ def upload():
             file.save(filepath)
 
             parsed_data = EmailParserService.parse_eml(filepath)
-            # We can delete the file after parsing for security as per requirements
             os.remove(filepath)
         elif raw_headers:
             parsed_data = EmailParserService.parse_raw(raw_headers)
@@ -44,45 +48,55 @@ def upload():
             return redirect(request.url)
 
         if parsed_data:
-            # Perform Analysis
-            # Mocking sender IP as we don't have it from a file usually unless extracted from Received headers
-            # In a real scenario, we might extract the first relay IP
-            sender_ip = ""
-            if parsed_data['headers'].get('Received'):
-                # Very basic extraction of first IP
-                import re
-                received = str(parsed_data['headers']['Received'])
-                ip_match = re.search(r'\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]', received)
-                if ip_match:
-                    sender_ip = ip_match.group(1)
+            # 1. Header Analysis
+            header_results = HeaderAnalyzerService.analyze(parsed_data['headers'])
 
-            from_addr = parsed_data['from']
-            raw_content = parsed_data['raw_content']
+            # 2. Authentication Analysis
+            sender_ip = header_results.get('origin_ip', '')
+            auth_results = AuthAnalyzerService.analyze(parsed_data['raw_content'], sender_ip, parsed_data['headers'].get('From', ''))
 
-            auth_results = AuthAnalyzerService.analyze(raw_content, sender_ip, from_addr)
-            threat_results = ThreatAnalyzerService.analyze(parsed_data, auth_results)
+            # 3. URL Analysis
+            url_results = URLAnalyzerService.analyze(parsed_data)
+
+            # 4. Attachment Analysis
             attachment_results = AttachmentHandlerService.analyze_attachments(parsed_data['attachments'])
+
+            # 5. IOC Extraction
+            iocs = IOCExtractor.extract(parsed_data, url_results, attachment_results)
+
+            # 6. Risk Scoring
+            risk_report = RiskScoringEngine.calculate(
+                header_results,
+                auth_results,
+                url_results,
+                attachment_results
+            )
+
+            # 7. Generate Report Data
+            report_data = ReportingService.generate_report_data(
+                parsed_data,
+                header_results,
+                auth_results,
+                url_results,
+                attachment_results,
+                risk_report,
+                iocs
+            )
 
             # Save to Database
             analysis = EmailAnalysis(
                 filename=filename,
                 subject=parsed_data['subject'],
-                sender=str(parsed_data['from']),
-                recipient=str(parsed_data['to']),
-                risk_score=threat_results['scoring']['score'],
-                risk_level=threat_results['scoring']['risk_level']
+                sender=parsed_data['headers'].get('From', 'Unknown'),
+                recipient=parsed_data['headers'].get('To', 'Unknown'),
+                risk_score=risk_report['score'],
+                risk_level=risk_report['risk_level'],
+                report_data_json=json.dumps(report_data)
             )
             analysis.set_headers(parsed_data['headers'])
             analysis.set_auth_results(auth_results)
-            analysis.set_ioc_results(threat_results['iocs'])
+            analysis.set_ioc_results(iocs)
             analysis.set_attachments(attachment_results)
-
-            import json
-            analysis.report_data_json = json.dumps({
-                'body_html': parsed_data['body_html'],
-                'body_plain': parsed_data['body_plain'],
-                'scoring_reasons': threat_results['scoring']['reasons']
-            })
 
             db.session.add(analysis)
             db.session.commit()
@@ -94,6 +108,5 @@ def upload():
 @bp.route('/results/<int:id>')
 def results(id):
     analysis = EmailAnalysis.query.get_or_404(id)
-    import json
     report_data = json.loads(analysis.report_data_json)
     return render_template('results.html', analysis=analysis, report_data=report_data)

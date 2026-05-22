@@ -1,10 +1,11 @@
 flask
 flask-sqlalchemy
+flask-wtf
+flask-limiter
 mail-parser
 beautifulsoup4
 dnspython
 tldextract
-yara-python
 pyspf
 dkimpy
 requests

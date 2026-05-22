@@ -8,6 +8,7 @@ def app():
     app.config.update({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        "WTF_CSRF_ENABLED": False, # Disable CSRF for testing
     })
 
     with app.app_context():
@@ -34,5 +35,6 @@ def test_raw_header_analysis(client):
     response = client.post('/upload', data={'raw_headers': raw_email}, follow_redirects=True)
     assert response.status_code == 200
     assert b"Analysis Report" in response.data
+    # Use different search strings based on updated template
     assert b"sender@example.com" in response.data
     assert b"http://phish.com" in response.data

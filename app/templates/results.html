@@ -23,27 +23,45 @@
     <div class="col-md-4">
         <div class="card text-center h-100">
             <div class="card-body">
-                <h5 class="card-title">Threat Score</h5>
-                <h1 class="display-1 {% if analysis.risk_score >= 75 %}text-danger{% elif analysis.risk_score >= 25 %}text-warning{% else %}text-success{% endif %}">
+                <h5 class="card-title">Risk Assessment</h5>
+                <h1 class="display-1 {% if analysis.risk_score >= 80 %}text-danger{% elif analysis.risk_score >= 60 %}text-warning{% elif analysis.risk_score >= 30 %}text-info{% else %}text-success{% endif %}">
                     {{ analysis.risk_score }}
                 </h1>
                 <h3 class="badge {% if analysis.risk_level == 'Critical' %}bg-danger{% elif analysis.risk_level == 'High' %}bg-danger{% elif analysis.risk_level == 'Medium' %}bg-warning text-dark{% else %}bg-success{% endif %} fs-4">
-                    {{ analysis.risk_level }} Risk
+                    {{ analysis.risk_level }}
                 </h3>
+                <p class="mt-3 text-muted">{{ report_data.summary }}</p>
             </div>
         </div>
     </div>
     <div class="col-md-8">
         <div class="card h-100">
             <div class="card-body">
-                <h5 class="card-title">Analysis Summary</h5>
-                <ul class="list-group list-group-flush bg-transparent">
-                    {% for reason in report_data.scoring_reasons %}
-                    <li class="list-group-item bg-transparent text-white">⚠️ {{ reason }}</li>
-                    {% else %}
-                    <li class="list-group-item bg-transparent text-white">✅ No major threats detected</li>
-                    {% endfor %}
-                </ul>
+                <h5 class="card-title">Risk Factors (Explainable Evidence)</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm table-dark mt-2">
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Score</th>
+                                <th>Reason</th>
+                                <th>Evidence</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for factor in report_data.risk_factors %}
+                            <tr>
+                                <td><code class="text-warning">{{ factor.rule }}</code></td>
+                                <td>+{{ factor.weight }}</td>
+                                <td>{{ factor.reason }}</td>
+                                <td class="small text-muted">{{ factor.evidence }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center">No risk factors identified.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -53,7 +71,7 @@
     <div class="col-12">
         <ul class="nav nav-tabs mb-3" id="analysisTabs" role="tablist">
             <li class="nav-item">
-                <button class="nav-link active" id="headers-tab" data-bs-toggle="tab" data-bs-target="#headers" type="button">Headers</button>
+                <button class="nav-link active" id="headers-tab" data-bs-toggle="tab" data-bs-target="#headers" type="button">Headers & Relay</button>
             </li>
             <li class="nav-item">
                 <button class="nav-link" id="auth-tab" data-bs-toggle="tab" data-bs-target="#auth" type="button">Authentication</button>
@@ -72,14 +90,24 @@
         <div class="tab-content card p-3" id="analysisTabsContent">
             <!-- Headers Tab -->
             <div class="tab-pane fade show active" id="headers">
-                <h5>Email Headers</h5>
+                <h5>Received Relay Chain</h5>
+                <div class="list-group mb-4">
+                    {% for hop in report_data.header_analysis.relay_chain %}
+                    <div class="list-group-item bg-dark border-secondary">
+                        <small class="text-info">Hop {{ loop.index }}</small>
+                        <p class="mb-0 small text-break">{{ hop }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <h5>Full Email Headers</h5>
                 <div class="table-responsive">
                     <table class="table table-sm table-dark">
                         {% for key, value in analysis.get_headers().items() %}
                         {% if value %}
                         <tr>
                             <th width="20%">{{ key }}</th>
-                            <td class="text-break">{{ value }}</td>
+                            <td class="text-break small">{{ value }}</td>
                         </tr>
                         {% endif %}
                         {% endfor %}
@@ -89,19 +117,33 @@
 
             <!-- Auth Tab -->
             <div class="tab-pane fade" id="auth">
-                <h5>Security Authentication Results</h5>
+                <h5>Authentication Integrity</h5>
                 <div class="row">
-                    {% for key, val in analysis.get_auth_results().items() %}
+                    {% for key, val in report_data.auth_results.items() %}
                     <div class="col-md-4 mb-3">
-                        <div class="card bg-dark border-secondary">
+                        <div class="card bg-dark border-secondary h-100">
                             <div class="card-body">
-                                <h6>{{ key | upper }}</h6>
-                                <p class="mb-1">
+                                <div class="d-flex justify-content-between">
+                                    <h6>{{ key | upper }}</h6>
                                     <span class="badge {% if val.result == 'pass' or val.result == 'found' %}bg-success{% elif val.result == 'fail' %}bg-danger{% else %}bg-secondary{% endif %}">
                                         {{ val.result | upper }}
                                     </span>
-                                </p>
-                                <small class="text-muted">{{ val.explanation or val.record or '' }}</small>
+                                </div>
+                                <p class="mt-2 mb-1 small text-white">{{ val.explanation or '' }}</p>
+                                {% if val.aligned is defined %}
+                                <div class="mt-2">
+                                    <small>Alignment:
+                                        {% if val.aligned %}
+                                        <span class="text-success">✅ Aligned</span>
+                                        {% else %}
+                                        <span class="text-danger">❌ Misaligned</span>
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                {% endif %}
+                                {% if val.policy %}
+                                <small class="text-info">Policy: {{ val.policy }}</small>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -111,48 +153,60 @@
 
             <!-- IOCs Tab -->
             <div class="tab-pane fade" id="iocs">
-                <h5>Extracted Indicators of Compromise</h5>
-                {% set iocs = analysis.get_ioc_results() %}
+                <h5>Normalized Indicators of Compromise</h5>
+                {% set iocs = report_data.iocs %}
                 <div class="row">
-                    <div class="col-md-6">
-                        <h6>URLs</h6>
-                        <ul class="list-group list-group-flush">
+                    <div class="col-md-6 mb-4">
+                        <h6>URLs (Detected in body)</h6>
+                        <ul class="list-group list-group-flush bg-transparent">
                             {% for url in iocs.urls %}
-                            <li class="list-group-item bg-transparent text-info">{{ url }}</li>
+                            <li class="list-group-item bg-transparent text-info small text-break">{{ url }}</li>
                             {% else %}
                             <li class="list-group-item bg-transparent text-muted">No URLs found</li>
                             {% endfor %}
                         </ul>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 mb-4">
                         <h6>Domains</h6>
-                        <ul class="list-group list-group-flush">
+                        <ul class="list-group list-group-flush bg-transparent">
                             {% for domain in iocs.domains %}
-                            <li class="list-group-item bg-transparent text-info">{{ domain }}</li>
+                            <li class="list-group-item bg-transparent text-info small">{{ domain }}</li>
                             {% else %}
                             <li class="list-group-item bg-transparent text-muted">No domains found</li>
                             {% endfor %}
                         </ul>
                     </div>
                 </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
+                <div class="row">
+                    <div class="col-md-6 mb-4">
                         <h6>IP Addresses</h6>
-                        <ul class="list-group list-group-flush">
+                        <ul class="list-group list-group-flush bg-transparent">
                             {% for ip in iocs.ips %}
-                            <li class="list-group-item bg-transparent text-warning">{{ ip }}</li>
+                            <li class="list-group-item bg-transparent text-warning small">{{ ip }}</li>
                             {% else %}
                             <li class="list-group-item bg-transparent text-muted">No IPs found</li>
                             {% endfor %}
                         </ul>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 mb-4">
                         <h6>Email Addresses</h6>
-                        <ul class="list-group list-group-flush">
+                        <ul class="list-group list-group-flush bg-transparent">
                             {% for email in iocs.emails %}
-                            <li class="list-group-item bg-transparent">{{ email }}</li>
+                            <li class="list-group-item bg-transparent small">{{ email }}</li>
                             {% else %}
                             <li class="list-group-item bg-transparent text-muted">No emails found</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <h6>File Hashes (SHA256)</h6>
+                        <ul class="list-group list-group-flush bg-transparent">
+                            {% for hash in iocs.hashes.sha256 %}
+                            <li class="list-group-item bg-transparent small"><code>{{ hash }}</code></li>
+                            {% else %}
+                            <li class="list-group-item bg-transparent text-muted">No attachments found</li>
                             {% endfor %}
                         </ul>
                     </div>
@@ -161,33 +215,36 @@
 
             <!-- Attachments Tab -->
             <div class="tab-pane fade" id="attachments">
-                <h5>Attachments Analysis</h5>
+                <h5>Attachments Evidence</h5>
                 <div class="table-responsive">
-                    <table class="table table-dark">
+                    <table class="table table-dark table-sm">
                         <thead>
                             <tr>
                                 <th>Filename</th>
-                                <th>Type</th>
+                                <th>Magic Type</th>
                                 <th>Size</th>
                                 <th>Status</th>
-                                <th>Hashes (SHA256)</th>
+                                <th>Threat Indicators</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for att in analysis.get_attachments() %}
+                            {% for att in report_data.attachment_analysis %}
                             <tr>
                                 <td>{{ att.filename }}</td>
-                                <td>{{ att.content_type }}</td>
+                                <td><small>{{ att.content_type }}</small></td>
                                 <td>{{ (att.size / 1024) | round(2) }} KB</td>
                                 <td>
                                     {% if att.is_suspicious %}
                                     <span class="badge bg-danger">Suspicious</span>
-                                    <br><small class="text-danger">{{ att.reasons | join(', ') }}</small>
                                     {% else %}
                                     <span class="badge bg-success">Clean</span>
                                     {% endif %}
                                 </td>
-                                <td><code>{{ att.hashes.sha256 }}</code></td>
+                                <td class="small">
+                                    {% for reason in att.reasons %}
+                                    <div class="text-danger">⚠️ {{ reason }}</div>
+                                    {% endfor %}
+                                </td>
                             </tr>
                             {% else %}
                             <tr><td colspan="5" class="text-center">No attachments found</td></tr>
@@ -199,10 +256,13 @@
 
             <!-- Body Tab -->
             <div class="tab-pane fade" id="body">
-                <h5>Sanitized Email Body</h5>
+                <h5>Strictly Sanitized Body Content</h5>
+                <div class="alert alert-info py-2 small">
+                    Security Policy: All active content, scripts, and external images have been stripped for analyst safety.
+                </div>
                 <div class="mb-3">
-                    <h6>HTML Version (Sanitized)</h6>
-                    <div class="p-3 border border-secondary rounded bg-white text-dark overflow-auto" style="max-height: 400px;">
+                    <h6>HTML View</h6>
+                    <div class="p-3 border border-secondary rounded bg-white text-dark overflow-auto" style="max-height: 500px;">
                         {% if report_data.body_html %}
                             {{ report_data.body_html | safe }}
                         {% else %}
@@ -211,8 +271,8 @@
                     </div>
                 </div>
                 <div>
-                    <h6>Plain Text Version</h6>
-                    <pre class="p-3 border border-secondary rounded bg-dark text-light">{% if report_data.body_plain %}{{ report_data.body_plain }}{% else %}No plain text content{% endif %}</pre>
+                    <h6>Text View</h6>
+                    <pre class="p-3 border border-secondary rounded bg-dark text-light small">{% if report_data.body_plain %}{{ report_data.body_plain }}{% else %}No plain text content{% endif %}</pre>
                 </div>
             </div>
         </div>

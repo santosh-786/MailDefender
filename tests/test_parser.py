@@ -1,6 +1,5 @@
 import pytest
-from app.services.email_parser import EmailParserService
-import os
+from app.parser.service import EmailParserService
 
 def test_parse_raw_email():
     raw_email = """From: sender@example.com
@@ -13,7 +12,7 @@ This is a test body.
 """
     parsed = EmailParserService.parse_raw(raw_email)
     assert parsed['subject'] == "Test Email"
-    assert "sender@example.com" in str(parsed['from'])
+    assert "sender@example.com" in parsed['headers']['From']
     assert "This is a test body." in parsed['body_plain']
 
 def test_sanitization():
@@ -22,8 +21,9 @@ To: recipient@example.com
 Subject: Test HTML
 Content-Type: text/html
 
-<html><body><p>Hello</p><script>alert(1)</script></body></html>
+<html><body><p>Hello</p><script>alert(1)</script><a href="http://evil.com">Click</a></body></html>
 """
     parsed = EmailParserService.parse_raw(raw_email)
     assert "<script>" not in parsed['body_html']
+    assert "href" not in parsed['body_html'] # Attributes should be stripped in our strict config
     assert "<p>Hello</p>" in parsed['body_html']
