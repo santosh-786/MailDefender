@@ -7,3 +7,4 @@ class Config:
     UPLOAD_FOLDER = 'app/uploads'
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     ALLOWED_EXTENSIONS = {'eml'}
+    VT_API_KEYS = os.environ.get('VT_API_KEYS') or ''
