@@ -1,0 +1,15 @@
+flask
+flask-sqlalchemy
+flask-wtf
+flask-limiter
+mail-parser
+beautifulsoup4
+dnspython
+tldextract
+pyspf
+dkimpy
+requests
+python-magic
+python-dotenv
+bleach
+yara-python

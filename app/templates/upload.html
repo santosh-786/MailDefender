@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title mb-4">Analyze New Email</h3>
+
+                <form action="{{ url_for('main.upload') }}" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-4">
+                        <label for="email_file" class="form-label">Upload .eml File</label>
+                        <input class="form-control" type="file" id="email_file" name="email_file" accept=".eml">
+                        <div class="form-text">Select a standard email export file (.eml)</div>
+                    </div>
+
+                    <div class="text-center mb-4">
+                        <span class="text-muted">-- OR --</span>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="raw_headers" class="form-label">Paste Raw Email Content/Headers</label>
+                        <textarea class="form-control" id="raw_headers" name="raw_headers" rows="10" placeholder="Paste full email headers and content here..."></textarea>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">Start Analysis</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="alert alert-warning mt-4">
+            <strong>Security Warning:</strong> All content is treated as malicious. The application will sanitize the body and will not execute any attachments.
+        </div>
+    </div>
+</div>
+{% endblock %}

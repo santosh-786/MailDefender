@@ -1,0 +1,195 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>Investigation: <code>{{ analysis.case_id }}</code></h2>
+        <p class="text-muted">Subject: {{ analysis.subject }} | Analyzed on: {{ analysis.timestamp.strftime('%Y-%m-%d %H:%M') }}</p>
+    </div>
+    <div class="col-auto">
+        <form action="{{ url_for('main.update_workflow', id=analysis.id) }}" method="post" class="d-inline-block me-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="status" class="form-select bg-dark text-light border-secondary d-inline-block w-auto" onchange="this.form.submit()">
+                <option value="New" {% if analysis.status == 'New' %}selected{% endif %}>New</option>
+                <option value="Phishing" {% if analysis.status == 'Phishing' %}selected{% endif %}>Phishing</option>
+                <option value="Benign" {% if analysis.status == 'Benign' %}selected{% endif %}>Benign</option>
+                <option value="Suspicious" {% if analysis.status == 'Suspicious' %}selected{% endif %}>Suspicious</option>
+            </select>
+        </form>
+        <div class="dropdown d-inline-block">
+            <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">Export</button>
+            <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="{{ url_for('api.export_json', id=analysis.id) }}">JSON (Graph)</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('api.export_csv', id=analysis.id) }}">CSV (IOCs)</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center mb-3">
+            <div class="card-body py-4">
+                <h6>Risk Score</h6>
+                <h1 class="display-4 text-danger">{{ report_data.risk_score }}</h1>
+                <span class="badge bg-danger fs-6">{{ analysis.risk_level }}</span>
+            </div>
+        </div>
+        <div class="card text-center mb-3">
+            <div class="card-body">
+                <h6>Trust Score</h6>
+                <h2 class="{% if report_data.trust_score < 70 %}text-warning{% else %}text-success{% endif %}">{{ report_data.trust_score }}</h2>
+                <small class="text-muted">Identity Correlation</small>
+            </div>
+        </div>
+        <div class="card text-center">
+            <div class="card-body">
+                <h6>Confidence</h6>
+                <h2>{{ report_data.confidence_score }}%</h2>
+                <small class="text-muted">Evidence Strength</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5>Executive Summary</h5>
+                <p class="lead">{{ report_data.explanation }}</p>
+                <hr class="border-secondary">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Trust Inconsistencies</h6>
+                        {% for inc in report_data.trust_correlation.inconsistencies %}
+                        <div class="alert alert-warning py-1 px-2 small mb-1">
+                            <strong>{{ inc.type }}</strong>: {{ inc.description }}
+                        </div>
+                        {% else %}
+                        <p class="text-success small">✅ No identity inconsistencies detected</p>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Risk Categories</h6>
+                        {% for cat, score in report_data.categories.items() %}
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small text-capitalize">{{ cat }}</span>
+                            <div class="progress w-50 mt-1" style="height: 8px;">
+                                <div class="progress-bar bg-info" style="width: {{ score }}%"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <ul class="nav nav-tabs mb-3" id="analysisTabs">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#relay">Relay Chain</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#ioc-graph">IOC Relationship</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#auth">Authentication</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#attachments">Attachments</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#body">Body Content</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#notes">Analyst Notes</button></li>
+        </ul>
+
+        <div class="tab-content card p-3 bg-dark border-secondary">
+            <div class="tab-pane fade show active" id="relay">
+                <h5>Structured Relay Timeline</h5>
+                <div class="timeline mt-3">
+                    {% for hop in report_data.relay_analysis.hops %}
+                    <div class="mb-3 border-start border-info ps-3 position-relative">
+                        <div class="position-absolute bg-info rounded-circle" style="width: 12px; height: 12px; left: -7px; top: 5px;"></div>
+                        <div class="d-flex justify-content-between">
+                            <strong>Hop {{ hop.hop }}: {{ hop.ip or 'Unknown IP' }}</strong>
+                            {% for flag in hop.flags %}
+                            <span class="badge bg-warning text-dark">{{ flag.type }}</span>
+                            {% endfor %}
+                        </div>
+                        <p class="small text-muted mb-0">{{ hop.content }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="ioc-graph">
+                <h5>IOC Relationship Mapping (Graph View)</h5>
+                <div class="row">
+                    <div class="col-md-8 bg-black rounded" style="height: 400px; position: relative;">
+                        <div class="p-3">
+                            {% for node in report_data.ioc_graph.nodes %}
+                            <div class="badge bg-outline-info border border-info mb-1">{{ node.type }}: {{ node.label }}</div>
+                            {% endfor %}
+                        </div>
+                        <p class="position-absolute bottom-0 end-0 p-2 small text-muted">Relationship Mapping (Structured View)</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Relationships</h6>
+                        <ul class="list-group list-group-flush bg-transparent">
+                            {% for edge in report_data.ioc_graph.edges %}
+                            <li class="list-group-item bg-transparent text-white small">
+                                <code>{{ edge.source }}</code> &rarr; <span class="text-info">{{ edge.relation }}</span> &rarr; <code>{{ edge.target }}</code>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="auth">
+                 <h5>Authentication Analysis</h5>
+                 <div class="table-responsive">
+                     <table class="table table-dark table-sm">
+                         <thead><tr><th>Indicator</th><th>Result</th><th>Alignment</th><th>Evidence</th></tr></thead>
+                         <tbody>
+                             {% for key, val in report_data.auth_results.items() %}
+                             <tr>
+                                 <td>{{ key | upper }}</td>
+                                 <td><span class="badge {% if val.result == 'pass' %}bg-success{% elif val.result == 'fail' %}bg-danger{% else %}bg-secondary{% endif %}">{{ val.result }}</span></td>
+                                 <td>{{ 'Aligned' if val.aligned else 'Misaligned' }}</td>
+                                 <td class="small">{{ val.explanation }}</td>
+                             </tr>
+                             {% endfor %}
+                         </tbody>
+                     </table>
+                 </div>
+            </div>
+
+            <div class="tab-pane fade" id="attachments">
+                <h5>Attachment Risk Summary</h5>
+                <table class="table table-dark table-sm">
+                    <thead><tr><th>Filename</th><th>MIME</th><th>Size</th><th>Risk</th></tr></thead>
+                    <tbody>
+                        {% for att in report_data.attachment_analysis %}
+                        <tr>
+                            <td>{{ att.filename }}</td>
+                            <td>{{ att.content_type }}</td>
+                            <td>{{ (att.size/1024)|round(1) }} KB</td>
+                            <td>{{ '⚠️ Suspicious' if att.is_suspicious else '✅ Clean' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="tab-pane fade" id="body">
+                <h5>Sanitized Body Content</h5>
+                <div class="bg-white text-dark p-3 rounded mb-3 overflow-auto" style="max-height: 400px;">{{ report_data.body_html | safe }}</div>
+                <pre class="bg-black text-light p-3 rounded small">{{ report_data.body_plain }}</pre>
+            </div>
+
+            <div class="tab-pane fade" id="notes">
+                <h5>Analyst Notes & History</h5>
+                <form action="{{ url_for('main.update_workflow', id=analysis.id) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="status" value="{{ analysis.status }}">
+                    <textarea name="notes" class="form-control bg-dark text-light border-secondary mb-3" rows="5" placeholder="Add investigation notes...">{{ analysis.analyst_notes or '' }}</textarea>
+                    <button type="submit" class="btn btn-primary">Save Notes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
